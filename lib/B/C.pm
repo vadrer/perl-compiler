@@ -4182,6 +4182,8 @@ sub B::CV::save {
       } else {
         $init->add( "CvPADLIST($sym) = $padlistsym;" );
       }
+    } elsif (!$cv->XSUB) {
+      warn "Warning: $fullname has not PADLIST!\n" if $verbose;
     }
     warn $fullname."\n" if $debug{sub};
   }
@@ -4387,13 +4389,13 @@ sub B::CV::save {
     if ( $xcv_outside == ${ main_cv() } ) {
       $init->add( "CvOUTSIDE($sym) = PL_main_cv;",
                   "SvREFCNT_inc(PL_main_cv);" );
-      if ($$padlist) {
-        if ($PERL522) {
-          $init->add( "CvPADLIST($sym)->xpadl_outid = CvPADLIST(PL_main_cv)->xpadl_id;");
-        } elsif ($] >= 5.017005) {
-          $init->add( "CvPADLIST($sym)->xpadl_outid = PadlistNAMES(CvPADLIST(PL_main_cv));");
-        }
+      #if ($$padlist) {
+      if ($PERL522) {
+        $init->add( "CvPADLIST($sym)->xpadl_outid = CvPADLIST(PL_main_cv)->xpadl_id;");
+      } elsif ($] >= 5.017005) {
+        $init->add( "CvPADLIST($sym)->xpadl_outid = PadlistNAMES(CvPADLIST(PL_main_cv));");
       }
+      #}
     } else {
       $init->add( sprintf("CvOUTSIDE(%s) = (CV*)s\\_%x;", $sym, $xcv_outside) );
       #if ($PERL522) {
