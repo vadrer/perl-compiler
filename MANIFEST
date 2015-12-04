@@ -223,6 +223,7 @@ t/issue330.t
 t/issue338.t
 t/issue34.t
 t/issue340.t
+t/issue343.t
 t/issue348.t
 t/issue35.t
 t/issue350.t

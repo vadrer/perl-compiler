@@ -605,7 +605,6 @@ sub run_cc_test {
     $opt = '' unless $opt;
     #if ($] > 5.021006 and $fnbackend eq 'cc') { print "ok $cnt # skip CC for 5.22 WIP\n"; return 1; }
     use Config;
-    require B::C::Flags;
     # note that the smokers run the c.t and c_o3.t tests in parallel, with possible
     # interleaving file writes even for the .pl.
     my $test = $fnbackend."code".$cnt.$opt.".pl";
