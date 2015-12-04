@@ -339,11 +339,7 @@ BEGIN {
     eval q[sub SVt_PVGV() {13}];
     eval q[sub CVf_WEAKOUTSIDE() { 0x0 }]; # unused
   }
-  if ($] >= 5.009) {
-    B->import(qw(SVs_PADSTALE)); # added with 5.9.0
-   } else {
-    eval q[sub SVs_PADSTALE() { 0x0 }]; # unused
-   }
+  eval q[sub CVf_UNIQUE(){0x0100}]; # only needed for 5.22
   if ($] >= 5.010) {
     #require mro; # mro->import();
     # not exported:
@@ -4407,7 +4403,14 @@ sub B::CV::save {
       }
     } else {
       $init->add( sprintf("CvOUTSIDE(%s) = (CV*)%s;", $sym, $outside) );
-      if ($PERL522 and $cv->CvFLAGS & 0x4100 and ${$cv->OUTSIDE->PADLIST}) { # 343
+      if ($PERL522 # hack for #343
+          and $cv->CvFLAGS == 0x4000
+          and $cv->OUTSIDE->CvFLAGS == 0x4100
+          and !${$cv->OUTSIDE->GV}
+          and $$padlist) {
+        #and !${$cv->OUTSIDE->PADLIST}) {
+        #warn $cv->OUTSIDE->PADLIST, ${$cv->OUTSIDE->PADLIST}?" defined":"",
+        #     " ",$cv->OUTSIDE->PADLIST->MAX, $cv->OUTSIDE->GV;;
         warn "link outer padlist of $outside to $sym\n" if $debug{cv};
         $init->no_split;
         $init->add("{",
@@ -4415,7 +4418,9 @@ sub B::CV::save {
                    "  CvPADLIST((CV*)$sym)->xpadl_outid = padl->xpadl_id;",
                    "  PadlistNAMESARRAY(padl) = PadlistNAMESARRAY(CvPADLIST((CV*)$sym));");
         for my $i (0 .. $padlist->MAX) {
-          $init->add("  PadnameFLAGS(PadlistNAMESARRAY(padl)[$i]) &= ~PADNAMEt_OUTER;");
+          $init->add("  if (PadlistNAMESARRAY(padl)[$i]",
+                     "   && PadlistNAMESARRAY(padl)[$i] != &PL_padname_undef)",
+                     "      PadnameFLAGS(PadlistNAMESARRAY(padl)[$i]) &= ~PADNAMEt_OUTER;");
         }
         $init->add("}");
         $init->split;
