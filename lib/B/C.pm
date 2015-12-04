@@ -12,7 +12,7 @@
 package B::C;
 use strict;
 
-our $VERSION = '1.53_03';
+our $VERSION = '1.53_04';
 our %debug;
 our $check;
 our %Config;
@@ -4089,7 +4089,7 @@ sub B::CV::save {
     } elsif ($cv->is_lexsub($gv)) {
       # need to find the attached lexical sub (#130 + #341) at run-time
       # in the PadNAMES array. So keep the empty PVCV
-      warn "lexsub &".$fullname." saved as empty $sym\n" if $debug{sub};
+      warn "empty &".$fullname." saved as $sym\n" if $debug{sub};
     } else {
       warn "Warning: &".$fullname." not found\n" if $debug{sub};
       $init->add( "/* CV $fullname not found */" ) if $verbose or $debug{sub};
@@ -4119,6 +4119,7 @@ sub B::CV::save {
   my $pv         = $cv->PV;
   my $xsub       = 0;
   my $xsubany    = "{0}";
+  my $xcv_outside = ${ $cv->OUTSIDE };
   if ($$root) {
     warn sprintf( "saving op tree for CV 0x%x, root=0x%x\n",
                   $$cv, $$root )
@@ -4182,13 +4183,21 @@ sub B::CV::save {
       } else {
         $init->add( "CvPADLIST($sym) = $padlistsym;" );
       }
-    } elsif (!$cv->XSUB) {
-      warn "Warning: $fullname has not PADLIST!\n" if $verbose;
+    } elsif (!$cvxsub) {
+      warn "Warning: Empty PADLIST for $fullname\n" if $verbose;
     }
     warn $fullname."\n" if $debug{sub};
   }
   elsif ($cv->is_lexsub($gv)) {
-    ;
+    if ($PERL522) {
+      #if ($cv->OUTSIDE) {
+      #  warn "copy outer padlist to $sym\n" if $debug{cv};
+      #  $init->add(sprintf("CvPADLIST($sym) = CvPADLIST(s\\_%x);", $xcv_outside)) if $xcv_outside;
+      #} else {
+      warn "force empty padlist for empty inner cv $fullname $sym\n" if $debug{cv};
+      $init->add("CvPADLIST($sym) = Perl_pad_new(aTHX_ 0);");
+      #}
+    }
   }
   elsif (!exists &$fullname) {
     warn $fullname." not found\n" if $debug{sub};
@@ -4232,7 +4241,6 @@ sub B::CV::save {
   # need to survive cv_undef as there is no protection against static CVs
   my $refcnt = $cv->REFCNT + ($PERL510 ? 1 : 0);
   # GV cannot be initialized statically
-  my $xcv_outside = ${ $cv->OUTSIDE };
   if ($xcv_outside == ${ main_cv() } and !$MULTI) {
     # Provide a temp. debugging hack for CvOUTSIDE. The address of the symbol &PL_main_cv
     # is known to the linker, the address of the value PL_main_cv not. This is set later
@@ -4385,23 +4393,33 @@ sub B::CV::save {
 
   $xcv_outside = ${ $cv->OUTSIDE };
   if ($xcv_outside == ${ main_cv() } or ref($cv->OUTSIDE) eq 'B::CV') {
+    my $outside = $cv->OUTSIDE->save;
     # patch CvOUTSIDE at run-time
     if ( $xcv_outside == ${ main_cv() } ) {
       $init->add( "CvOUTSIDE($sym) = PL_main_cv;",
                   "SvREFCNT_inc(PL_main_cv);" );
-      #if ($$padlist) {
-      if ($PERL522) {
-        $init->add( "CvPADLIST($sym)->xpadl_outid = CvPADLIST(PL_main_cv)->xpadl_id;");
-      } elsif ($] >= 5.017005) {
-        $init->add( "CvPADLIST($sym)->xpadl_outid = PadlistNAMES(CvPADLIST(PL_main_cv));");
+      if ($$padlist) {
+        if ($PERL522) {
+          $init->add( "CvPADLIST($sym)->xpadl_outid = CvPADLIST(PL_main_cv)->xpadl_id;");
+        } elsif ($] >= 5.017005) {
+          $init->add( "CvPADLIST($sym)->xpadl_outid = PadlistNAMES(CvPADLIST(PL_main_cv));");
+        }
       }
-      #}
     } else {
-      $init->add( sprintf("CvOUTSIDE(%s) = (CV*)s\\_%x;", $sym, $xcv_outside) );
-      #if ($PERL522) {
-      #  $init->add( sprintf("CvPADLIST(%s)->xpadl_outid = CvPADLIST(s\\_%x)->xpadl_id;",
-      #                      $sym, $xcv_outside));
-      #}
+      $init->add( sprintf("CvOUTSIDE(%s) = (CV*)%s;", $sym, $outside) );
+      if ($PERL522 and $cv->CvFLAGS & 0x4100 and ${$cv->OUTSIDE->PADLIST}) { # 343
+        warn "link outer padlist of $outside to $sym\n" if $debug{cv};
+        $init->no_split;
+        $init->add("{",
+                   "  PADLIST* padl = CvPADLIST($outside);",
+                   "  CvPADLIST((CV*)$sym)->xpadl_outid = padl->xpadl_id;",
+                   "  PadlistNAMESARRAY(padl) = PadlistNAMESARRAY(CvPADLIST((CV*)$sym));");
+        for my $i (0 .. $padlist->MAX) {
+          $init->add("  PadnameFLAGS(PadlistNAMESARRAY(padl)[$i]) &= ~PADNAMEt_OUTER;");
+        }
+        $init->add("}");
+        $init->split;
+      }
     }
   }
   elsif ($] >= 5.017005 and $xcv_outside and $$padlist) {

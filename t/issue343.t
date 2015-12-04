@@ -33,11 +33,9 @@ open F, ">", "$pmfile";
 print F $pmsrc;
 close F;
 
-my $todo = ($]>5.021?"TODO 5.22 \#343 ":"");
-ctestok(1,'C,-O3,-USocket','ccode343i',$script,
-        $todo."outpad C");
-ctestok(2,'CC,-USocket','cccode343i',$script,
-        $todo."outpad CC");
-plctestok(3,'ccode343i',$script,"outpad BC"); # needs patched 5.22
+my $todo = ""; #($]>5.021?"TODO 5.22 \#343 ":"");
+ctestok(1,'C,-O3,-USocket','ccode343i',$script, $todo."empty outpad C");
+ctestok(2,'CC,-USocket','cccode343i',$script, $todo."empty outpad CC");
+plctestok(3,'ccode343i',$script, "empty outpad BC"); # needs patched 5.22
 
 unlink($pmfile);
