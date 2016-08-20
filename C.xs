@@ -176,13 +176,8 @@ my_runops(pTHX)
             REGEXP* rx = PM_GETRE( (PMOP*)PL_op );
             SV* rv = newSViv( 0 );
 
-            New(0, op, 1, PMOP );
+            Newz(0, op, 1, PMOP );
             Copy( PL_op, op, 1, PMOP );
-            /* we need just the flags */
-            op->op_next = NULL;
-            op->op_sibling = NULL;
-            op->op_first = NULL;
-            op->op_last = NULL;
 
 #if PERL_VERSION < 10
             op->op_pmreplroot = NULL;

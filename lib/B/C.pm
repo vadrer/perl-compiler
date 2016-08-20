@@ -1172,7 +1172,7 @@ sub save_hek {
                          $sym, $cstr, $cur));
     }
     # protect against Unbalanced string table refcount warning with PERL_DESTRUCT_LEVEL=2
-    # $free->add("    $sym = NULL;");    
+    # $free->add("    $sym = NULL;");
   }
   return $sym;
 }
