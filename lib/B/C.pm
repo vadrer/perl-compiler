@@ -452,7 +452,8 @@ $all_bc_deps{Socket} = 1 if !@B::C::Config::deps and $] > 5.021;
 
 my ($prev_op, $package_pv, @package_pv); # global stash for methods since 5.13
 my (%symtable, %cvforward, %lexwarnsym);
-my (%strtable, %stashtable, %hektable, %statichektable, %gptable, %cophhtable, %copgvtable);
+my (%strtable, %stashtable, %hektable, %statichektable, %gptable, %cophhtable, %copgvtable,
+    %GvCvRVCache);
 my (%xsub, %init2_remap);
 my ($warn_undefined_syms, $swash_init, $swash_ToCf);
 my ($staticxs, $outfile);
@@ -3819,7 +3820,17 @@ sub B::RV::save {
       if $] > 5.019 or $ITHREADS;
     unless ($C99 && is_constant($rv)) {
       if ( $rv =~ /get_cv/ ) {
-        $init2->add( "$s.sv_u.svu_rv = (SV*)$rv;" ) ;
+        my $c;
+        # cache this RV to be used in init2 GvCV_set also (#376)
+        my ($cvname) = $rv =~ /get_cv(?:n_flags|)\("(.*)", /;
+        if ($c = $GvCvRVCache{$cvname}) {
+          # same stub or cv
+          $init2->add( "$s.sv_u.svu_rv = $c;" ) ;
+        } else {
+          $GvCvRVCache{$cvname} = "$s.sv_u.svu_rv";
+          #$init2->add( "/* cache \"$cvname\" */" ) if $verbose;
+          $init2->add( "$s.sv_u.svu_rv = (SV*)$rv;" ) ;
+        }
       } else {
         $init->add( "$s.sv_u.svu_rv = (SV*)$rv;" ) ;
       }
@@ -5227,10 +5238,14 @@ sub B::GV::save {
         }
         # must save as a 'stub' so newXS() has a CV to populate
         warn "save stub CvGV for $sym GP assignments $origname\n" if $debug{gv};
-        $init2->add(
-          sprintf("if ((sv = (SV*)%s))", get_cv($origname, "GV_ADD")),
-          sprintf("    GvCV_set(%s, (CV*)SvREFCNT_inc_simple_NN(sv));", $sym));
+        my $rv;
+        if ($rv = $GvCvRVCache{$origname}) {
+          $init2->add(sprintf("if (%s) GvCV_set(%s, (CV*)SvREFCNT_inc_simple_NN(%s));", $rv, $sym, $rv));
+        } else {
+          $init2->add(sprintf("if ((sv = (SV*)%s))", get_cv($origname, "GV_ADD")),
+                      sprintf("    GvCV_set(%s, (CV*)SvREFCNT_inc_simple_NN(sv));", $sym));
           # TODO: add evtl. to SvRV also.
+        }
       }
       elsif (!$PERL510 or $gp) {
 	if ($fullname eq 'Internals::V') { # local_patches if $] >= 5.011
