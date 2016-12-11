@@ -5340,6 +5340,7 @@ sub B::GV::save {
               if ($anyptr and $xsubany > 1000) { # not a XsubAliases
                 $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = &%s;", $sym, $anyptr ));
               } # some heuristics TODO. long or ptr? TODO 32bit
+              # if a XS symbol maybe search /proc/mem (.text) for a XS XOP
               elsif ($xsubany > 0x100000
                      and ($xsubany < 0xffffff00 or $xsubany > 0xffffffff))
               {
@@ -5350,6 +5351,10 @@ sub B::GV::save {
                   # should be only the 2 iterators
                   $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = (void*)&%s;", $sym,
                                         "XS_List__MoreUtils__".$gvname));
+                #} elsif ($package eq 'Class::XSAccessor' and $gvname =~ /_iterator$/) {
+                #  should be only the 2 iterators
+                #  $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = (void*)&%s;", $sym,
+                #                        "XS_Class__XSAccessor__".$gvname));
                 } else {
                   warn sprintf("TODO: Skipping %s->XSUBANY = 0x%x\n", $fullname, $xsubany ) if $verbose;
                   $init2->add( sprintf( "/* TODO CvXSUBANY(GvCV(%s)).any_ptr = 0x%lx; */", $sym, $xsubany ));
@@ -5358,7 +5363,7 @@ sub B::GV::save {
                 # S_ macro values
               } else {
                 # most likely any_i32 values for the XsubAliases provided by xsubpp
-                $init2->add( sprintf( "/* CvXSUBANY(GvCV(%s)).any_i32 = 0x%x; XSUB Alias */", $sym, $xsubany ));
+                $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_i32 = 0x%x; /* XSUB Alias */", $sym, $xsubany ));
               }
             }
           }
