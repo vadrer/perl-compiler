@@ -4217,13 +4217,15 @@ sub B::CV::save {
     }
     warn $fullname."\n" if $debug{sub};
     unless ( in_static_core($stashname, $cvname) ) {
+      my $flags = 0;
       no strict 'refs';
-      warn sprintf( "XSUB $fullname CV 0x%x\n", $$cv )
+      $flags = 'GV_ADD' if !$isconst and $cv->XSUBANY > 0x1000; # Class::XSAccessor method
+      warn sprintf( "XSUB $fullname CV 0x%x flags $flags\n", $$cv )
     	if $debug{cv};
       svref_2object( \*{"$stashname\::bootstrap"} )->save
         if $stashname;# and defined ${"$stashname\::bootstrap"};
       # delsym($cv);
-      return get_cv($fullname, 0);
+      return get_cv($fullname, $flags);
     } else {  # Those cvs are already booted. Reuse their GP.
       # Esp. on windows it is impossible to get at the XS function ptr
       warn sprintf( "core XSUB $fullname CV 0x%x\n", $$cv ) if $debug{cv};
@@ -5338,7 +5340,15 @@ sub B::GV::save {
               # try if it points to an already registered symbol
               my $anyptr = $symtable{ sprintf( "s\\_%x", $xsubany ) };
               if ($anyptr and $xsubany > 1000) { # not a XsubAliases
-                $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = &%s;", $sym, $anyptr ));
+                if ($INC{"Class/XSAccessor.pm"}) {
+                  # WIP: detect the GV of the sub to be enhanced. and post-init as with DBI
+                  # test 400: foo
+                  $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = (void*)&%s; /* WIP: what value or method? XOP */", $sym,
+                                        "XS_Class__XSAccessor_newxs_constructor"));
+                } else { # usually wrong
+                  warn sprintf("any_ptr: %s XSUBANY=0x%x\n", $fullname, $xsubany) if $verbose or $debug{cv};
+                  $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = &%s; /* known symbol */", $sym, $anyptr ));
+                }
               } # some heuristics TODO. long or ptr? TODO 32bit
               # if a XS symbol maybe search /proc/mem (.text) for a XS XOP
               elsif ($xsubany > 0x100000
@@ -5351,10 +5361,15 @@ sub B::GV::save {
                   # should be only the 2 iterators
                   $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = (void*)&%s;", $sym,
                                         "XS_List__MoreUtils__".$gvname));
-                #} elsif ($package eq 'Class::XSAccessor' and $gvname =~ /_iterator$/) {
-                #  should be only the 2 iterators
-                #  $init2->add( sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = (void*)&%s;", $sym,
-                #                        "XS_Class__XSAccessor__".$gvname));
+                }
+                elsif ($INC{"Class/XSAccessor.pm"}) {
+                  # TODO check that this GV is really a part of XSAccessor (the import arg, or a ptr).
+                  # WIP: detect the GV of the sub to be enhanced. and post-init as with DBI
+                  # test 400: foo
+                  my $pkg = "Class::XSAccessor";
+                  $init2_remap{$pkg}{XSUBANY} = [] unless $init2_remap{$pkg}{'XSUBANY'};
+                  push @{$init2_remap{$pkg}{XSUBANY}}, { SYM => $sym, NAME => $fullname,
+                                                         TO => "XS_Class__XSAccessor_newxs_constructor"};
                 } else {
                   warn sprintf("TODO: Skipping %s->XSUBANY = 0x%x\n", $fullname, $xsubany ) if $verbose;
                   $init2->add( sprintf( "/* TODO CvXSUBANY(GvCV(%s)).any_ptr = 0x%lx; */", $sym, $xsubany ));
@@ -6484,6 +6499,19 @@ EOT
                       "  handle = INT2PTR(void*,POPi);",
                       "  PUTBACK;",
                      );
+        }
+        for my $xsany (@{$init2_remap{$pkg}{XSUBANY}}) {
+          warn "init2 remap CvXSUBANY(CvGV($xsany->{NAME})) to a dlsym of $pkg\n"
+            if $verbose;
+          if ($HAVE_DLFCN_DLOPEN) {
+            $init2->add(sprintf("  CvXSUBANY(GvCV(%s)).any_ptr = dlsym(handle, %s); /* $xsany->{TO} */",
+                                $xsany->{SYM}, cstring($xsany->{TO})));
+            #$init2->add( 'sv = (SV*)dlsym(NULL, "XS_Class__XSAccessor_newxs_constructor");',
+            #             sprintf( "CvXSUBANY(GvCV(%s)).any_ptr = (void*)sv; /* WIP $gvname */",
+            #                      $sym, $gvname));
+          } else {
+            die;
+          }
         }
         for my $mg (@{$init2_remap{$pkg}{MG}}) {
           warn "init2 remap xpvmg_list[$mg->{ID}].xiv_iv to dlsym of $pkg\: $mg->{NAME}\n"
