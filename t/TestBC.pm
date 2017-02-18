@@ -1371,6 +1371,7 @@ sub todo_tests_default {
 	push @todo, (24,29) if $] >= 5.021006 and $what eq 'cc_o2';
         push @todo, (103)   if $CPERL and $ITHREADS;
         push @todo, (9,10,15,24,26,27,41..45,103) if $] > 5.023007 and !$CPERL;
+        #push @todo, (15)    if $] >= 5.025 and $CPERL;
     }
     push @todo, (48)   if $] > 5.007 and $] < 5.009 and $^O =~ /MSWin32|cygwin/i;
     return @todo;

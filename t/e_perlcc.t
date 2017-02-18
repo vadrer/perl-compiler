@@ -95,7 +95,7 @@ cleanup;
 TODO: {
     # fails 5.8 and before sometimes on darwin, msvc also.
     local $TODO = '--staticxs is experimental on darwin and <5.10' if $] < 5.010
-      or ($^O eq 'darwin' and $ITHREADS);
+      or $^O eq 'darwin';
     is(`$perlcc --staticxs -r -e $e $devnull`, "ok", "-r --staticxs xs"); #13
     ok(-e $a_exe, "keep default executable"); #14
 }
