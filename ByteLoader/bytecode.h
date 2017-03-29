@@ -456,18 +456,16 @@ static int bget_swab = 0;
 	    BSET_OBJ_STOREX(sv);			\
 	} STMT_END
 
-#if (PERL_VERSION > 6)
-#define BSET_newop(o, size)	NewOpSz(666, o, size)
-#else
-#define BSET_newop(o, size)	(o=(OP*)safemalloc(size), memzero(o, size))
+#if (PERL_VERSION <= 6)
+#define NewOpSz(x,o,size) \
+	o=(OP*)safemalloc(size), memzero(o, size)
 #endif
+#define BSET_newop(o, size)	NewOpSz(666, o, size)
+
 /* arg is encoded as type <<7 and size */
 #define BSET_newopx(o, arg) STMT_START {	\
 	register int size = arg & 0x7f;		\
-	register OP* newop;			\
-	BSET_newop(newop, size);		\
-	/* newop->op_next = o; XXX */		\
-	o = newop;				\
+	BSET_newop(o, size);                    \
 	arg >>= 7;				\
 	BSET_op_type(o, arg);			\
 	BSET_OBJ_STOREX(o);			\
@@ -475,7 +473,7 @@ static int bget_swab = 0;
 
 #define BSET_newopn(o, arg) STMT_START {	\
 	OP *oldop = o;				\
-	BSET_newop(o, arg);			\
+	BSET_newop(o, arg);                     \
 	oldop->op_next = o;			\
     } STMT_END
 
