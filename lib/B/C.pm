@@ -6938,12 +6938,14 @@ my_curse( pTHX_ SV* const sv ) {
     dSP;
     dVAR;
     HV* stash;
+    int reset_stash;
 
 #if PERL_VERSION > 7
     assert(SvOBJECT(sv));
     do {
         stash = SvSTASH(sv);
         assert(SvTYPE(stash) == SVt_PVHV);
+        reset_stash = 0;
 	if (HvNAME(stash)) {
 	    CV* destructor = NULL;
 	    if (!SvOBJECT(stash)) destructor = (CV *)SvSTASH(stash);
@@ -6962,7 +6964,9 @@ my_curse( pTHX_ SV* const sv ) {
 		        HvAUX(stash)->xhv_mro_meta->destroy_gen = PL_sub_generation;
 #endif
                     }
-		}
+		} else {
+                    reset_stash = 1;
+                }
 	    }
 	    assert(!destructor || destructor == ((CV *)0)+1
 		   || SvTYPE(destructor) == SVt_PVCV);
@@ -7003,6 +7007,8 @@ my_curse( pTHX_ SV* const sv ) {
 		SvREFCNT_dec(tmpref);
 	    }
 	}
+        if (reset_stash)
+            SvSTASH(stash) = Nullhv;
     } while (SvOBJECT(sv) && SvSTASH(sv) != stash);
 
     if (SvOBJECT(sv)) {
